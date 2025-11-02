@@ -29,7 +29,7 @@ export default function AttendanceRecords() {
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({
     userId: "",
-    type: "",
+    type: "all",
     startDate: "",
     endDate: "",
   });
@@ -69,7 +69,7 @@ export default function AttendanceRecords() {
       if (filters.userId) {
         query = query.eq("user_id", filters.userId);
       }
-      if (filters.type) {
+      if (filters.type && filters.type !== "all") {
         query = query.eq("type", filters.type);
       }
       if (filters.startDate) {
@@ -158,7 +158,7 @@ export default function AttendanceRecords() {
                 <SelectValue placeholder="Todos" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Todos</SelectItem>
+                <SelectItem value="all">Todos</SelectItem>
                 <SelectItem value="entrada">Entrada</SelectItem>
                 <SelectItem value="salida">Salida</SelectItem>
               </SelectContent>
