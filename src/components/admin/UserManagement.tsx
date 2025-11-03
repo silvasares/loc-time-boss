@@ -9,31 +9,34 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { UserPlus, Edit, Trash2, Loader2, Shield, User } from "lucide-react";
+import { UserPlus, Trash2, Loader2, Shield, User } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { z } from "zod";
 
 const userSchema = z.object({
+  username: z.string().min(3, "El usuario debe tener al menos 3 caracteres"),
   email: z.string().email("Email inválido"),
   password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres"),
-  fullName: z.string().min(2, "El nombre debe tener al menos 2 caracteres"),
+  fullName: z.string().min(1, "El nombre es requerido"),
   role: z.enum(["admin", "trabajador"]),
 });
 
-type UserProfile = {
+interface UserProfile {
   id: string;
+  username: string;
   email: string;
   full_name: string;
+  role?: "admin" | "trabajador";
   created_at: string;
-  role?: string;
-};
+}
 
 export default function UserManagement() {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
+    username: "",
     email: "",
     password: "",
     fullName: "",
@@ -47,27 +50,31 @@ export default function UserManagement() {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const { data: profilesData, error: profilesError } = await supabase
+      const { data, error } = await supabase
         .from("profiles")
-        .select("*")
+        .select(`
+          id,
+          username,
+          email,
+          full_name,
+          created_at
+        `)
         .order("created_at", { ascending: false });
 
-      if (profilesError) throw profilesError;
+      if (error) throw error;
 
-      // Fetch roles for all users
-      const userIds = profilesData?.map(p => p.id) || [];
-      const { data: rolesData, error: rolesError } = await supabase
+      // Fetch roles for each user
+      const userIds = data?.map(p => p.id) || [];
+      const { data: rolesData } = await supabase
         .from("user_roles")
         .select("user_id, role")
         .in("user_id", userIds);
 
-      if (rolesError) throw rolesError;
-
       // Map roles to users
       const rolesMap = new Map(rolesData?.map(r => [r.user_id, r.role]));
-      const enrichedUsers = profilesData?.map(user => ({
+      const enrichedUsers = data?.map(user => ({
         ...user,
-        role: rolesMap.get(user.id),
+        role: rolesMap.get(user.id) as "admin" | "trabajador" | undefined,
       })) || [];
 
       setUsers(enrichedUsers);
@@ -83,10 +90,9 @@ export default function UserManagement() {
     e.preventDefault();
 
     try {
-      // Validate form data
       userSchema.parse(formData);
 
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
         options: {
@@ -100,11 +106,38 @@ export default function UserManagement() {
 
       if (error) throw error;
 
+      if (data.user) {
+        const { error: profileError } = await supabase
+          .from("profiles")
+          .insert({
+            id: data.user.id,
+            username: formData.username,
+            email: formData.email,
+            full_name: formData.fullName,
+          });
+
+        if (profileError) throw profileError;
+
+        const { error: roleError } = await supabase
+          .from("user_roles")
+          .insert({
+            user_id: data.user.id,
+            role: formData.role,
+          });
+
+        if (roleError) throw roleError;
+      }
+
       toast.success("Usuario creado exitosamente");
       setDialogOpen(false);
-      setFormData({ email: "", password: "", fullName: "", role: "trabajador" });
+      setFormData({
+        username: "",
+        email: "",
+        password: "",
+        fullName: "",
+        role: "trabajador",
+      });
       
-      // Refresh users list
       setTimeout(() => fetchUsers(), 1000);
     } catch (error: any) {
       console.error("Error creating user:", error);
@@ -120,9 +153,7 @@ export default function UserManagement() {
     if (!confirm("¿Estás seguro de eliminar este usuario?")) return;
 
     try {
-      // Delete profile (cascade will handle user_roles and attendance_records)
       const { error } = await supabase.from("profiles").delete().eq("id", userId);
-
       if (error) throw error;
 
       toast.success("Usuario eliminado exitosamente");
@@ -151,56 +182,65 @@ export default function UserManagement() {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Crear Nuevo Usuario</DialogTitle>
-                <DialogDescription>
-                  Completa los datos para crear una nueva cuenta
-                </DialogDescription>
               </DialogHeader>
-              <form onSubmit={handleCreateUser} className="space-y-4">
+              <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label htmlFor="new-fullName">Nombre completo</Label>
+                  <Label htmlFor="username">Usuario</Label>
                   <Input
-                    id="new-fullName"
+                    id="username"
                     type="text"
-                    placeholder="Juan Pérez"
-                    value={formData.fullName}
-                    onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                    required
+                    placeholder="nombreusuario"
+                    value={formData.username}
+                    onChange={(e) =>
+                      setFormData({ ...formData, username: e.target.value })
+                    }
                   />
                 </div>
-
                 <div className="space-y-2">
-                  <Label htmlFor="new-email">Correo electrónico</Label>
+                  <Label htmlFor="email">Email</Label>
                   <Input
-                    id="new-email"
+                    id="email"
                     type="email"
                     placeholder="correo@ejemplo.com"
                     value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    required
+                    onChange={(e) =>
+                      setFormData({ ...formData, email: e.target.value })
+                    }
                   />
                 </div>
-
                 <div className="space-y-2">
-                  <Label htmlFor="new-password">Contraseña</Label>
+                  <Label htmlFor="password">Contraseña</Label>
                   <Input
-                    id="new-password"
+                    id="password"
                     type="password"
                     placeholder="••••••••"
                     value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    required
+                    onChange={(e) =>
+                      setFormData({ ...formData, password: e.target.value })
+                    }
                   />
                 </div>
-
                 <div className="space-y-2">
-                  <Label htmlFor="new-role">Rol</Label>
+                  <Label htmlFor="fullName">Nombre completo</Label>
+                  <Input
+                    id="fullName"
+                    type="text"
+                    placeholder="Juan Pérez"
+                    value={formData.fullName}
+                    onChange={(e) =>
+                      setFormData({ ...formData, fullName: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="role">Rol</Label>
                   <Select
                     value={formData.role}
                     onValueChange={(value: "admin" | "trabajador") =>
                       setFormData({ ...formData, role: value })
                     }
                   >
-                    <SelectTrigger id="new-role">
+                    <SelectTrigger id="role">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -209,11 +249,10 @@ export default function UserManagement() {
                     </SelectContent>
                   </Select>
                 </div>
-
-                <Button type="submit" className="w-full">
+                <Button onClick={handleCreateUser} className="w-full">
                   Crear Usuario
                 </Button>
-              </form>
+              </div>
             </DialogContent>
           </Dialog>
         </div>
@@ -229,6 +268,8 @@ export default function UserManagement() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Usuario</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Nombre Completo</TableHead>
                   <TableHead>Rol</TableHead>
                   <TableHead>Fecha de creación</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
@@ -237,19 +278,16 @@ export default function UserManagement() {
               <TableBody>
                 {users.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center text-muted-foreground">
+                    <TableCell colSpan={6} className="text-center text-muted-foreground">
                       No hay usuarios registrados
                     </TableCell>
                   </TableRow>
                 ) : (
                   users.map((user) => (
                     <TableRow key={user.id}>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{user.full_name}</p>
-                          <p className="text-sm text-muted-foreground">{user.email}</p>
-                        </div>
-                      </TableCell>
+                      <TableCell>{user.username}</TableCell>
+                      <TableCell>{user.email}</TableCell>
+                      <TableCell>{user.full_name}</TableCell>
                       <TableCell>
                         <Badge
                           variant={user.role === "admin" ? "default" : "secondary"}

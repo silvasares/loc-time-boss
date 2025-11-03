@@ -11,9 +11,9 @@ import { ClipboardCheck } from "lucide-react";
 import { z } from "zod";
 
 const authSchema = z.object({
-  email: z.string().email("Email inválido"),
+  emailOrUsername: z.string().min(1, "Usuario o email requerido"),
   password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres"),
-  fullName: z.string().min(2, "El nombre debe tener al menos 2 caracteres").optional(),
+  fullName: z.string().optional(),
 });
 
 export default function Auth() {
@@ -22,54 +22,83 @@ export default function Auth() {
   const [loading, setLoading] = useState(false);
   const [isFirstAdmin, setIsFirstAdmin] = useState(false);
   const [formData, setFormData] = useState({
-    email: "",
+    emailOrUsername: "",
     password: "",
     fullName: "",
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    try {
+      authSchema.parse(formData);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        toast.error(error.errors[0].message);
+      }
+      return;
+    }
+
     setLoading(true);
 
     try {
-      // Validate form data
-      authSchema.parse(isLogin ? { email: formData.email, password: formData.password } : formData);
-
       if (isLogin) {
-        // Login
+        // Check if it's an email or username
+        let email = formData.emailOrUsername;
+        
+        // If it doesn't contain @, assume it's a username and fetch the email
+        if (!email.includes('@')) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('email')
+            .eq('username', formData.emailOrUsername)
+            .maybeSingle();
+          
+          if (!profile) {
+            toast.error("Usuario no encontrado");
+            return;
+          }
+          
+          email = profile.email;
+        }
+        
         const { error } = await supabase.auth.signInWithPassword({
-          email: formData.email,
+          email,
           password: formData.password,
         });
 
         if (error) throw error;
+
         toast.success("¡Bienvenido!");
         navigate("/");
       } else {
-        // Signup
+        if (!formData.fullName) {
+          toast.error("El nombre completo es requerido");
+          return;
+        }
+
+        const redirectUrl = `${window.location.origin}/`;
+
         const { error } = await supabase.auth.signUp({
-          email: formData.email,
+          email: formData.emailOrUsername,
           password: formData.password,
           options: {
-            emailRedirectTo: `${window.location.origin}/`,
             data: {
               full_name: formData.fullName,
               role: isFirstAdmin ? "admin" : "trabajador",
             },
+            emailRedirectTo: redirectUrl,
           },
         });
 
         if (error) throw error;
+
         toast.success(isFirstAdmin ? "¡Administrador creado exitosamente!" : "¡Usuario creado exitosamente!");
         navigate("/");
       }
     } catch (error: any) {
-      console.error("Error de autenticación:", error);
-      if (error instanceof z.ZodError) {
-        toast.error(error.errors[0].message);
-      } else {
-        toast.error(error.message || "Error en la autenticación");
-      }
+      console.error("Error en autenticación:", error);
+      toast.error(error.message || "Error en la autenticación");
     } finally {
       setLoading(false);
     }
@@ -108,13 +137,13 @@ export default function Auth() {
             )}
             
             <div className="space-y-2">
-              <Label htmlFor="email">Correo electrónico</Label>
+              <Label htmlFor="emailOrUsername">{isLogin ? "Usuario o Email" : "Email"}</Label>
               <Input
-                id="email"
-                type="email"
-                placeholder="correo@ejemplo.com"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                id="emailOrUsername"
+                type="text"
+                placeholder={isLogin ? "usuario o correo@ejemplo.com" : "correo@ejemplo.com"}
+                value={formData.emailOrUsername}
+                onChange={(e) => setFormData({ ...formData, emailOrUsername: e.target.value })}
                 required
               />
             </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Download, Filter, LogIn, LogOut, Loader2 } from "lucide-react";
+import { Download, Filter, LogIn, LogOut, Loader2, X } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -29,6 +29,7 @@ export default function AttendanceRecords() {
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({
     userId: "",
+    role: "all",
     type: "all",
     startDate: "",
     endDate: "",
@@ -58,6 +59,16 @@ export default function AttendanceRecords() {
     };
   }, [filters]);
 
+  const clearFilters = () => {
+    setFilters({
+      userId: "",
+      role: "all",
+      type: "all",
+      startDate: "",
+      endDate: "",
+    });
+  };
+
   const fetchRecords = async () => {
     try {
       setLoading(true);
@@ -66,6 +77,28 @@ export default function AttendanceRecords() {
         .select("*")
         .order("timestamp", { ascending: false });
 
+      // Filter by role first
+      let filteredUserIds: string[] | undefined;
+      if (filters.role && filters.role !== "all") {
+        const { data: roleData } = await supabase
+          .from("user_roles")
+          .select("user_id")
+          .eq("role", filters.role as "admin" | "trabajador");
+        
+        if (roleData) {
+          filteredUserIds = roleData.map(r => r.user_id);
+          if (filteredUserIds.length === 0) {
+            setRecords([]);
+            setLoading(false);
+            return;
+          }
+        }
+      }
+      
+      if (filteredUserIds && filteredUserIds.length > 0) {
+        query = query.in("user_id", filteredUserIds);
+      }
+      
       if (filters.userId) {
         query = query.eq("user_id", filters.userId);
       }
@@ -84,11 +117,11 @@ export default function AttendanceRecords() {
       if (attendanceError) throw attendanceError;
 
       // Fetch user profiles for all records
-      const userIds = [...new Set(attendanceData?.map(r => r.user_id) || [])];
+      const recordUserIds = [...new Set(attendanceData?.map(r => r.user_id) || [])];
       const { data: profilesData, error: profilesError } = await supabase
         .from("profiles")
         .select("id, full_name, email")
-        .in("id", userIds);
+        .in("id", recordUserIds);
 
       if (profilesError) throw profilesError;
 
@@ -145,16 +178,43 @@ export default function AttendanceRecords() {
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Registros de Asistencia</CardTitle>
-        <CardDescription>Visualiza y exporta los registros de entrada y salida</CardDescription>
+        <Button 
+          variant="outline" 
+          size="sm"
+          onClick={clearFilters}
+        >
+          <X className="mr-2 h-4 w-4" />
+          Limpiar Filtros
+        </Button>
       </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="type">Tipo</Label>
-            <Select value={filters.type} onValueChange={(value) => setFilters({ ...filters, type: value })}>
-              <SelectTrigger id="type">
+      <CardContent>
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <Select
+              value={filters.role}
+              onValueChange={(value) =>
+                setFilters({ ...filters, role: value })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Filtrar por rol" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los roles</SelectItem>
+                <SelectItem value="trabajador">Trabajadores</SelectItem>
+                <SelectItem value="admin">Administradores</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select
+              value={filters.type}
+              onValueChange={(value) =>
+                setFilters({ ...filters, type: value })
+              }
+            >
+              <SelectTrigger>
                 <SelectValue placeholder="Todos" />
               </SelectTrigger>
               <SelectContent>
@@ -163,104 +223,93 @@ export default function AttendanceRecords() {
                 <SelectItem value="salida">Salida</SelectItem>
               </SelectContent>
             </Select>
-          </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="startDate">Fecha inicial</Label>
             <Input
-              id="startDate"
               type="date"
               value={filters.startDate}
               onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
+              placeholder="Fecha inicial"
             />
-          </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="endDate">Fecha final</Label>
             <Input
-              id="endDate"
               type="date"
               value={filters.endDate}
               onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
+              placeholder="Fecha final"
             />
-          </div>
 
-          <div className="flex items-end gap-2">
-            <Button onClick={fetchRecords} className="flex-1">
-              <Filter className="mr-2 h-4 w-4" />
-              Filtrar
-            </Button>
             <Button onClick={exportToCSV} variant="outline">
-              <Download className="h-4 w-4" />
+              <Download className="mr-2 h-4 w-4" />
+              Exportar CSV
             </Button>
           </div>
-        </div>
 
-        {loading ? (
-          <div className="flex justify-center py-8">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          </div>
-        ) : (
-          <div className="rounded-md border overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Usuario</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Fecha y Hora</TableHead>
-                  <TableHead>Duración</TableHead>
-                  <TableHead>Ubicación</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {records.length === 0 ? (
+          {loading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : (
+            <div className="rounded-md border overflow-x-auto">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground">
-                      No se encontraron registros
-                    </TableCell>
+                    <TableHead>Usuario</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Fecha y Hora</TableHead>
+                    <TableHead>Duración</TableHead>
+                    <TableHead>Ubicación</TableHead>
                   </TableRow>
-                ) : (
-                  records.map((record) => (
-                    <TableRow key={record.id}>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{record.user_name || "N/A"}</p>
-                          <p className="text-sm text-muted-foreground">{record.user_email || "N/A"}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={record.type === "entrada" ? "default" : "destructive"}
-                          className={
-                            record.type === "entrada"
-                              ? "bg-entry hover:bg-entry/90"
-                              : "bg-exit hover:bg-exit/90"
-                          }
-                        >
-                          {record.type === "entrada" ? (
-                            <LogIn className="mr-1 h-3 w-3" />
-                          ) : (
-                            <LogOut className="mr-1 h-3 w-3" />
-                          )}
-                          {record.type.charAt(0).toUpperCase() + record.type.slice(1)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {format(new Date(record.timestamp), "dd/MM/yyyy HH:mm", { locale: es })}
-                      </TableCell>
-                      <TableCell>{formatDuration(record.duration_minutes)}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {record.latitude && record.longitude
-                          ? `${record.latitude.toFixed(4)}, ${record.longitude.toFixed(4)}`
-                          : "N/A"}
+                </TableHeader>
+                <TableBody>
+                  {records.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground">
+                        No se encontraron registros
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        )}
+                  ) : (
+                    records.map((record) => (
+                      <TableRow key={record.id}>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{record.user_name || "N/A"}</p>
+                            <p className="text-sm text-muted-foreground">{record.user_email || "N/A"}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={record.type === "entrada" ? "default" : "destructive"}
+                            className={
+                              record.type === "entrada"
+                                ? "bg-entry hover:bg-entry/90"
+                                : "bg-exit hover:bg-exit/90"
+                            }
+                          >
+                            {record.type === "entrada" ? (
+                              <LogIn className="mr-1 h-3 w-3" />
+                            ) : (
+                              <LogOut className="mr-1 h-3 w-3" />
+                            )}
+                            {record.type.charAt(0).toUpperCase() + record.type.slice(1)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {format(new Date(record.timestamp), "dd/MM/yyyy HH:mm", { locale: es })}
+                        </TableCell>
+                        <TableCell>{formatDuration(record.duration_minutes)}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {record.latitude && record.longitude
+                            ? `${record.latitude.toFixed(4)}, ${record.longitude.toFixed(4)}`
+                            : "N/A"}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );
