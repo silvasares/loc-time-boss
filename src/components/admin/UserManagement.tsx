@@ -99,34 +99,13 @@ export default function UserManagement() {
           emailRedirectTo: `${window.location.origin}/`,
           data: {
             full_name: formData.fullName,
+            username: formData.username,
             role: formData.role,
           },
         },
       });
 
       if (error) throw error;
-
-      if (data.user) {
-        const { error: profileError } = await supabase
-          .from("profiles")
-          .insert({
-            id: data.user.id,
-            username: formData.username,
-            email: formData.email,
-            full_name: formData.fullName,
-          });
-
-        if (profileError) throw profileError;
-
-        const { error: roleError } = await supabase
-          .from("user_roles")
-          .insert({
-            user_id: data.user.id,
-            role: formData.role,
-          });
-
-        if (roleError) throw roleError;
-      }
 
       toast.success("Usuario creado exitosamente");
       setDialogOpen(false);
