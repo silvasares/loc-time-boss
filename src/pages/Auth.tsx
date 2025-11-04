@@ -50,7 +50,7 @@ export default function Auth() {
         if (!email.includes('@')) {
           const { data: profile } = await supabase
             .from('profiles')
-            .select('email')
+            .select('email, username')
             .eq('username', formData.emailOrUsername)
             .maybeSingle();
           
@@ -59,7 +59,8 @@ export default function Auth() {
             return;
           }
           
-          email = profile.email;
+          // If email is null (worker without email), construct the fake email
+          email = profile.email || `${profile.username}@trabajador.local`;
         }
         
         const { error } = await supabase.auth.signInWithPassword({
