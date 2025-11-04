@@ -8,7 +8,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Download, Filter, LogIn, LogOut, Loader2, X } from "lucide-react";
+import { Download, Filter, LogIn, LogOut, Loader2, X, Trash2 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -27,9 +28,9 @@ type AttendanceRecord = {
 export default function AttendanceRecords() {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedRecords, setSelectedRecords] = useState<Set<string>>(new Set());
   const [filters, setFilters] = useState({
-    userId: "",
-    role: "all",
+    searchTerm: "",
     type: "all",
     startDate: "",
     endDate: "",
@@ -61,12 +62,54 @@ export default function AttendanceRecords() {
 
   const clearFilters = () => {
     setFilters({
-      userId: "",
-      role: "all",
+      searchTerm: "",
       type: "all",
       startDate: "",
       endDate: "",
     });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedRecords.size === records.length) {
+      setSelectedRecords(new Set());
+    } else {
+      setSelectedRecords(new Set(records.map(r => r.id)));
+    }
+  };
+
+  const handleSelectRecord = (recordId: string) => {
+    const newSelected = new Set(selectedRecords);
+    if (newSelected.has(recordId)) {
+      newSelected.delete(recordId);
+    } else {
+      newSelected.add(recordId);
+    }
+    setSelectedRecords(newSelected);
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedRecords.size === 0) {
+      toast.error("No hay registros seleccionados");
+      return;
+    }
+
+    if (!confirm(`¿Estás seguro de eliminar ${selectedRecords.size} registro(s)?`)) return;
+
+    try {
+      const { error } = await supabase
+        .from("attendance_records")
+        .delete()
+        .in("id", Array.from(selectedRecords));
+
+      if (error) throw error;
+
+      toast.success(`${selectedRecords.size} registro(s) eliminado(s)`);
+      setSelectedRecords(new Set());
+      fetchRecords();
+    } catch (error: any) {
+      console.error("Error deleting records:", error);
+      toast.error("Error al eliminar registros");
+    }
   };
 
   const fetchRecords = async () => {
@@ -77,31 +120,6 @@ export default function AttendanceRecords() {
         .select("*")
         .order("timestamp", { ascending: false });
 
-      // Filter by role first
-      let filteredUserIds: string[] | undefined;
-      if (filters.role && filters.role !== "all") {
-        const { data: roleData } = await supabase
-          .from("user_roles")
-          .select("user_id")
-          .eq("role", filters.role as "admin" | "trabajador");
-        
-        if (roleData) {
-          filteredUserIds = roleData.map(r => r.user_id);
-          if (filteredUserIds.length === 0) {
-            setRecords([]);
-            setLoading(false);
-            return;
-          }
-        }
-      }
-      
-      if (filteredUserIds && filteredUserIds.length > 0) {
-        query = query.in("user_id", filteredUserIds);
-      }
-      
-      if (filters.userId) {
-        query = query.eq("user_id", filters.userId);
-      }
       if (filters.type && filters.type !== "all") {
         query = query.eq("type", filters.type);
       }
@@ -127,11 +145,20 @@ export default function AttendanceRecords() {
 
       // Map profiles to records
       const profilesMap = new Map(profilesData?.map(p => [p.id, p]));
-      const enrichedRecords = attendanceData?.map(record => ({
+      let enrichedRecords = attendanceData?.map(record => ({
         ...record,
         user_name: profilesMap.get(record.user_id)?.full_name,
         user_email: profilesMap.get(record.user_id)?.email,
       })) || [];
+
+      // Filter by search term (name or email)
+      if (filters.searchTerm) {
+        const searchLower = filters.searchTerm.toLowerCase();
+        enrichedRecords = enrichedRecords.filter(record => 
+          record.user_name?.toLowerCase().includes(searchLower) ||
+          record.user_email?.toLowerCase().includes(searchLower)
+        );
+      }
 
       setRecords(enrichedRecords);
     } catch (error: any) {
@@ -180,33 +207,35 @@ export default function AttendanceRecords() {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Registros de Asistencia</CardTitle>
-        <Button 
-          variant="outline" 
-          size="sm"
-          onClick={clearFilters}
-        >
-          <X className="mr-2 h-4 w-4" />
-          Limpiar Filtros
-        </Button>
+        <div className="flex gap-2">
+          {selectedRecords.size > 0 && (
+            <Button 
+              variant="destructive" 
+              size="sm"
+              onClick={handleDeleteSelected}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Eliminar ({selectedRecords.size})
+            </Button>
+          )}
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={clearFilters}
+          >
+            <X className="mr-2 h-4 w-4" />
+            Limpiar Filtros
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <Select
-              value={filters.role}
-              onValueChange={(value) =>
-                setFilters({ ...filters, role: value })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Filtrar por rol" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los roles</SelectItem>
-                <SelectItem value="trabajador">Trabajadores</SelectItem>
-                <SelectItem value="admin">Administradores</SelectItem>
-              </SelectContent>
-            </Select>
+            <Input
+              placeholder="Buscar por nombre o email..."
+              value={filters.searchTerm}
+              onChange={(e) => setFilters({ ...filters, searchTerm: e.target.value })}
+            />
 
             <Select
               value={filters.type}
@@ -250,27 +279,39 @@ export default function AttendanceRecords() {
             </div>
           ) : (
             <div className="rounded-md border overflow-x-auto">
-              <Table>
-                <TableHeader>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={selectedRecords.size === records.length && records.length > 0}
+                      onCheckedChange={handleSelectAll}
+                    />
+                  </TableHead>
+                  <TableHead>Usuario</TableHead>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead>Fecha y Hora</TableHead>
+                  <TableHead>Duración</TableHead>
+                  <TableHead>Ubicación</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {records.length === 0 ? (
                   <TableRow>
-                    <TableHead>Usuario</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Fecha y Hora</TableHead>
-                    <TableHead>Duración</TableHead>
-                    <TableHead>Ubicación</TableHead>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground">
+                      No se encontraron registros
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {records.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground">
-                        No se encontraron registros
+                ) : (
+                  records.map((record) => (
+                    <TableRow key={record.id}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedRecords.has(record.id)}
+                          onCheckedChange={() => handleSelectRecord(record.id)}
+                        />
                       </TableCell>
-                    </TableRow>
-                  ) : (
-                    records.map((record) => (
-                      <TableRow key={record.id}>
-                        <TableCell>
+                      <TableCell>
                           <div>
                             <p className="font-medium">{record.user_name || "N/A"}</p>
                             <p className="text-sm text-muted-foreground">{record.user_email || "N/A"}</p>

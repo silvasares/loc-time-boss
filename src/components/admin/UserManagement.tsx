@@ -16,7 +16,7 @@ import { z } from "zod";
 
 const userSchema = z.object({
   username: z.string().min(3, "El usuario debe tener al menos 3 caracteres"),
-  email: z.string().email("Email inválido"),
+  email: z.string().email("Email inválido").optional().or(z.literal("")),
   password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres"),
   fullName: z.string().min(1, "El nombre es requerido"),
   role: z.enum(["admin", "trabajador"]),
@@ -25,7 +25,7 @@ const userSchema = z.object({
 interface UserProfile {
   id: string;
   username: string;
-  email: string;
+  email: string | null;
   full_name: string;
   role?: "admin" | "trabajador";
   created_at: string;
@@ -92,8 +92,13 @@ export default function UserManagement() {
     try {
       userSchema.parse(formData);
 
+      // For workers, email is optional, so we generate a fake email if not provided
+      const emailToUse = formData.email && formData.email.trim() !== "" 
+        ? formData.email 
+        : `${formData.username}@trabajador.local`;
+
       const { data, error } = await supabase.auth.signUp({
-        email: formData.email,
+        email: emailToUse,
         password: formData.password,
         options: {
           emailRedirectTo: `${window.location.origin}/`,
@@ -176,7 +181,10 @@ export default function UserManagement() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="email">
+                    Email {formData.role === "admin" && <span className="text-destructive">*</span>}
+                    {formData.role === "trabajador" && <span className="text-muted-foreground text-xs">(opcional)</span>}
+                  </Label>
                   <Input
                     id="email"
                     type="email"
@@ -185,6 +193,7 @@ export default function UserManagement() {
                     onChange={(e) =>
                       setFormData({ ...formData, email: e.target.value })
                     }
+                    required={formData.role === "admin"}
                   />
                 </div>
                 <div className="space-y-2">
@@ -265,7 +274,7 @@ export default function UserManagement() {
                   users.map((user) => (
                     <TableRow key={user.id}>
                       <TableCell>{user.username}</TableCell>
-                      <TableCell>{user.email}</TableCell>
+                      <TableCell>{user.email || "N/A"}</TableCell>
                       <TableCell>{user.full_name}</TableCell>
                       <TableCell>
                         <Badge
