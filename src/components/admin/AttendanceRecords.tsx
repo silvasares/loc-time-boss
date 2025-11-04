@@ -175,10 +175,9 @@ export default function AttendanceRecords() {
       return;
     }
 
-    const headers = ["Nombre", "Email", "Tipo", "Fecha y Hora", "Duración (min)", "Latitud", "Longitud"];
+    const headers = ["Nombre", "Tipo", "Fecha y Hora", "Duración (min)", "Latitud", "Longitud"];
     const csvData = records.map((record) => [
       record.user_name || "N/A",
-      record.user_email || "N/A",
       record.type,
       format(new Date(record.timestamp), "dd/MM/yyyy HH:mm:ss", { locale: es }),
       record.duration_minutes || "N/A",

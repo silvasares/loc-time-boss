@@ -137,7 +137,10 @@ export default function UserManagement() {
     if (!confirm("¿Estás seguro de eliminar este usuario?")) return;
 
     try {
-      const { error } = await supabase.from("profiles").delete().eq("id", userId);
+      const { data, error } = await supabase.functions.invoke("delete-user", {
+        body: { userId },
+      });
+
       if (error) throw error;
 
       toast.success("Usuario eliminado exitosamente");
