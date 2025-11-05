@@ -175,15 +175,49 @@ export default function AttendanceRecords() {
       return;
     }
 
-    const headers = ["Nombre", "Tipo", "Fecha y Hora", "Duración (min)", "Latitud", "Longitud"];
-    const csvData = records.map((record) => [
-      record.user_name || "N/A",
-      record.type,
-      format(new Date(record.timestamp), "dd/MM/yyyy HH:mm:ss", { locale: es }),
-      record.duration_minutes || "N/A",
-      record.latitude || "N/A",
-      record.longitude || "N/A",
-    ]);
+    // Group records by user and date
+    const groupedData = new Map<string, { entrada?: AttendanceRecord; salida?: AttendanceRecord }>();
+    
+    records.forEach(record => {
+      const dateKey = format(new Date(record.timestamp), "yyyy-MM-dd");
+      const key = `${record.user_id}_${dateKey}`;
+      
+      if (!groupedData.has(key)) {
+        groupedData.set(key, {});
+      }
+      
+      const group = groupedData.get(key)!;
+      if (record.type === "entrada") {
+        group.entrada = record;
+      } else if (record.type === "salida") {
+        group.salida = record;
+      }
+    });
+
+    const headers = ["Nombre", "Fecha", "Hora Entrada", "Hora Salida", "Duración Total", "Ubicación Entrada", "Ubicación Salida"];
+    const csvData: string[][] = [];
+
+    groupedData.forEach(group => {
+      const entrada = group.entrada;
+      const salida = group.salida;
+      const record = entrada || salida;
+      
+      if (!record) return;
+
+      csvData.push([
+        record.user_name || "N/A",
+        format(new Date(record.timestamp), "dd/MM/yyyy", { locale: es }),
+        entrada ? format(new Date(entrada.timestamp), "HH:mm:ss", { locale: es }) : "N/A",
+        salida ? format(new Date(salida.timestamp), "HH:mm:ss", { locale: es }) : "N/A",
+        salida?.duration_minutes ? formatDuration(salida.duration_minutes) : "N/A",
+        entrada && entrada.latitude && entrada.longitude 
+          ? `${entrada.latitude.toFixed(4)} ${entrada.longitude.toFixed(4)}` 
+          : "N/A",
+        salida && salida.latitude && salida.longitude 
+          ? `${salida.latitude.toFixed(4)} ${salida.longitude.toFixed(4)}` 
+          : "N/A",
+      ]);
+    });
 
     const csv = [headers, ...csvData].map((row) => row.join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
