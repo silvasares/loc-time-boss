@@ -9,10 +9,21 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { ClipboardCheck } from "lucide-react";
 import { z } from "zod";
-const authSchema = z.object({
+const loginSchema = z.object({
   emailOrUsername: z.string().min(1, "Usuario o email requerido"),
   password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres"),
-  fullName: z.string().optional()
+});
+
+const signupAdminSchema = z.object({
+  email: z.string().email("Email inválido"),
+  password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres"),
+  fullName: z.string().min(1, "Nombre completo requerido")
+});
+
+const signupWorkerSchema = z.object({
+  username: z.string().min(3, "El usuario debe tener al menos 3 caracteres"),
+  password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres"),
+  fullName: z.string().min(1, "Nombre completo requerido")
 });
 export default function Auth() {
   const navigate = useNavigate();
@@ -26,8 +37,24 @@ export default function Auth() {
   });
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate based on form type
     try {
-      authSchema.parse(formData);
+      if (isLogin) {
+        loginSchema.parse(formData);
+      } else if (isFirstAdmin) {
+        signupAdminSchema.parse({ 
+          email: formData.emailOrUsername, 
+          password: formData.password,
+          fullName: formData.fullName 
+        });
+      } else {
+        signupWorkerSchema.parse({ 
+          username: formData.emailOrUsername, 
+          password: formData.password,
+          fullName: formData.fullName 
+        });
+      }
     } catch (error) {
       if (error instanceof z.ZodError) {
         toast.error(error.errors[0].message);
@@ -67,16 +94,25 @@ export default function Auth() {
           toast.error("El nombre completo es requerido");
           return;
         }
+        
         const redirectUrl = `${window.location.origin}/`;
+        
+        // For workers, use username and generate fake email
+        // For admins, use the provided email
+        const email = isFirstAdmin 
+          ? formData.emailOrUsername 
+          : `${formData.emailOrUsername}@trabajador.local`;
+        
         const {
           error
         } = await supabase.auth.signUp({
-          email: formData.emailOrUsername,
+          email,
           password: formData.password,
           options: {
             data: {
               full_name: formData.fullName,
-              role: isFirstAdmin ? "admin" : "trabajador"
+              role: isFirstAdmin ? "admin" : "trabajador",
+              username: !isFirstAdmin ? formData.emailOrUsername : undefined
             },
             emailRedirectTo: redirectUrl
           }
@@ -118,11 +154,26 @@ export default function Auth() {
               </div>}
             
             <div className="space-y-2">
-              <Label htmlFor="emailOrUsername">{isLogin ? "Usuario o Email" : "Email"}</Label>
-              <Input id="emailOrUsername" type="text" placeholder={isLogin ? "usuario o correo@ejemplo.com" : "correo@ejemplo.com"} value={formData.emailOrUsername} onChange={e => setFormData({
-              ...formData,
-              emailOrUsername: e.target.value
-            })} required />
+              <Label htmlFor="emailOrUsername">
+                {isLogin 
+                  ? "Usuario o Email" 
+                  : (isFirstAdmin ? "Email" : "Usuario")}
+              </Label>
+              <Input 
+                id="emailOrUsername" 
+                type="text" 
+                placeholder={
+                  isLogin 
+                    ? "usuario o correo@ejemplo.com" 
+                    : (isFirstAdmin ? "correo@ejemplo.com" : "usuario")
+                } 
+                value={formData.emailOrUsername} 
+                onChange={e => setFormData({
+                  ...formData,
+                  emailOrUsername: e.target.value
+                })} 
+                required 
+              />
             </div>
 
             <div className="space-y-2">
