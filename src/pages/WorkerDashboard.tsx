@@ -149,48 +149,24 @@ export default function WorkerDashboard() {
         </CardHeader>
         <CardContent className="space-y-4">
           <Button
-            onClick={handleEntry}
-            disabled={loading || hasActiveEntry}
+            onClick={hasActiveEntry ? handleExit : handleEntry}
+            disabled={loading}
             size="lg"
-            className="w-full h-24 text-xl bg-entry hover:bg-entry/90"
+            className={`w-full h-24 text-xl ${
+              hasActiveEntry 
+                ? 'bg-exit hover:bg-exit/90' 
+                : 'bg-entry hover:bg-entry/90'
+            }`}
           >
-            {loading && !hasActiveEntry ? (
+            {loading ? (
               <Loader2 className="mr-2 h-6 w-6 animate-spin" />
+            ) : hasActiveEntry ? (
+              <LogOut className="mr-2 h-6 w-6" />
             ) : (
               <LogIn className="mr-2 h-6 w-6" />
             )}
-            Registrar Entrada
+            {hasActiveEntry ? 'Registrar Salida' : 'Registrar Entrada'}
           </Button>
-
-          <Button
-            onClick={handleExit}
-            disabled={loading || !hasActiveEntry}
-            size="lg"
-            variant="destructive"
-            className="w-full h-24 text-xl bg-exit hover:bg-exit/90"
-          >
-            {loading && hasActiveEntry ? (
-              <Loader2 className="mr-2 h-6 w-6 animate-spin" />
-            ) : (
-              <LogOut className="mr-2 h-6 w-6" />
-            )}
-            Registrar Salida
-          </Button>
-
-          {!hasActiveEntry && (
-            <p className="text-center text-sm text-muted-foreground">
-              Presiona "Registrar Entrada" para iniciar tu jornada
-            </p>
-          )}
-
-          {hasActiveEntry && (
-            <div className="p-4 bg-entry/10 rounded-lg border border-entry text-center">
-              <p className="font-medium text-entry">Tienes una entrada activa</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Registra tu salida cuando termines tu jornada
-              </p>
-            </div>
-          )}
         </CardContent>
       </Card>
     </div>
