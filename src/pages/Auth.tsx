@@ -10,20 +10,14 @@ import { toast } from "sonner";
 import { ClipboardCheck } from "lucide-react";
 import { z } from "zod";
 const loginSchema = z.object({
-  emailOrUsername: z.string().min(1, "Usuario o email requerido"),
+  username: z.string().min(1, "Usuario requerido"),
   password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres"),
 });
 
-const signupAdminSchema = z.object({
-  email: z.string().email("Email inválido"),
+const signupSchema = z.object({
+  username: z.string().min(3, "El usuario debe tener al menos 3 caracteres").max(50, "El usuario no puede tener más de 50 caracteres"),
   password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres"),
-  fullName: z.string().min(1, "Nombre completo requerido")
-});
-
-const signupWorkerSchema = z.object({
-  username: z.string().min(3, "El usuario debe tener al menos 3 caracteres"),
-  password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres"),
-  fullName: z.string().min(1, "Nombre completo requerido")
+  fullName: z.string().min(1, "Nombre completo requerido").max(100, "El nombre no puede tener más de 100 caracteres")
 });
 export default function Auth() {
   const navigate = useNavigate();
@@ -31,7 +25,7 @@ export default function Auth() {
   const [loading, setLoading] = useState(false);
   const [isFirstAdmin, setIsFirstAdmin] = useState(false);
   const [formData, setFormData] = useState({
-    emailOrUsername: "",
+    username: "",
     password: "",
     fullName: ""
   });
@@ -42,18 +36,8 @@ export default function Auth() {
     try {
       if (isLogin) {
         loginSchema.parse(formData);
-      } else if (isFirstAdmin) {
-        signupAdminSchema.parse({ 
-          email: formData.emailOrUsername, 
-          password: formData.password,
-          fullName: formData.fullName 
-        });
       } else {
-        signupWorkerSchema.parse({ 
-          username: formData.emailOrUsername, 
-          password: formData.password,
-          fullName: formData.fullName 
-        });
+        signupSchema.parse(formData);
       }
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -64,29 +48,23 @@ export default function Auth() {
     setLoading(true);
     try {
       if (isLogin) {
-        // Check if it's an email or username
-        let email = formData.emailOrUsername;
-
-        // If it doesn't contain @, assume it's a username and fetch the email
-        if (!email.includes('@')) {
-          const {
-            data: profile
-          } = await supabase.from('profiles').select('email, username').eq('username', formData.emailOrUsername).maybeSingle();
-          if (!profile) {
-            toast.error("Usuario no encontrado");
-            return;
-          }
-
-          // If email is null (worker without email), construct the fake email
-          email = profile.email || `${profile.username}@trabajador.local`;
-        }
-        const {
-          error
-        } = await supabase.auth.signInWithPassword({
-          email,
+        // Generate synthetic email from username
+        const syntheticEmail = `${formData.username}@asistencia.local`;
+        
+        const { error } = await supabase.auth.signInWithPassword({
+          email: syntheticEmail,
           password: formData.password
         });
-        if (error) throw error;
+        
+        if (error) {
+          if (error.message.includes("Invalid login credentials")) {
+            toast.error("Usuario o contraseña incorrectos");
+          } else {
+            throw error;
+          }
+          return;
+        }
+        
         toast.success("¡Bienvenido!");
         navigate("/");
       } else {
@@ -97,27 +75,31 @@ export default function Auth() {
         
         const redirectUrl = `${window.location.origin}/`;
         
-        // For workers, use username and generate fake email
-        // For admins, use the provided email
-        const email = isFirstAdmin 
-          ? formData.emailOrUsername 
-          : `${formData.emailOrUsername}@trabajador.local`;
+        // Generate synthetic email for all users
+        const syntheticEmail = `${formData.username}@asistencia.local`;
         
-        const {
-          error
-        } = await supabase.auth.signUp({
-          email,
+        const { error } = await supabase.auth.signUp({
+          email: syntheticEmail,
           password: formData.password,
           options: {
             data: {
               full_name: formData.fullName,
               role: isFirstAdmin ? "admin" : "trabajador",
-              username: !isFirstAdmin ? formData.emailOrUsername : undefined
+              username: formData.username
             },
             emailRedirectTo: redirectUrl
           }
         });
-        if (error) throw error;
+        
+        if (error) {
+          if (error.message.includes("User already registered")) {
+            toast.error("Este usuario ya está registrado");
+          } else {
+            throw error;
+          }
+          return;
+        }
+        
         toast.success(isFirstAdmin ? "¡Administrador creado exitosamente!" : "¡Usuario creado exitosamente!");
         navigate("/");
       }
@@ -154,23 +136,15 @@ export default function Auth() {
               </div>}
             
             <div className="space-y-2">
-              <Label htmlFor="emailOrUsername">
-                {isLogin 
-                  ? "Usuario o Email" 
-                  : (isFirstAdmin ? "Email" : "Usuario")}
-              </Label>
+              <Label htmlFor="username">Usuario</Label>
               <Input 
-                id="emailOrUsername" 
+                id="username" 
                 type="text" 
-                placeholder={
-                  isLogin 
-                    ? "usuario o correo@ejemplo.com" 
-                    : (isFirstAdmin ? "correo@ejemplo.com" : "usuario")
-                } 
-                value={formData.emailOrUsername} 
+                placeholder="usuario" 
+                value={formData.username} 
                 onChange={e => setFormData({
                   ...formData,
-                  emailOrUsername: e.target.value
+                  username: e.target.value
                 })} 
                 required 
               />
@@ -197,7 +171,16 @@ export default function Auth() {
           </form>
 
           <div className="mt-4 text-center text-sm">
-            
+            <button
+              type="button"
+              onClick={() => {
+                setIsLogin(!isLogin);
+                setFormData({ username: "", password: "", fullName: "" });
+              }}
+              className="text-primary hover:underline"
+            >
+              {isLogin ? "¿No tienes cuenta? Regístrate" : "¿Ya tienes cuenta? Inicia sesión"}
+            </button>
           </div>
         </CardContent>
       </Card>
