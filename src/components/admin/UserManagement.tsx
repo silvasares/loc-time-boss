@@ -92,10 +92,10 @@ export default function UserManagement() {
     try {
       userSchema.parse(formData);
 
-      // For workers, email is optional, so we generate a fake email if not provided
+      // Generate synthetic email for all users to match login format
       const emailToUse = formData.email && formData.email.trim() !== "" 
         ? formData.email 
-        : `${formData.username}@trabajador.local`;
+        : `${formData.username}@asistencia.local`;
 
       const { data, error } = await supabase.auth.signUp({
         email: emailToUse,
