@@ -175,20 +175,41 @@ export default function AttendanceRecords() {
       return;
     }
 
-    const headers = ["Nombre", "Email", "Tipo", "Fecha", "Hora", "Duración", "Ubicación"];
+    // Group records by user and date
+    const groupedData = new Map<string, { entrada?: AttendanceRecord; salida?: AttendanceRecord }>();
+    
+    records.forEach(record => {
+      const dateKey = format(new Date(record.timestamp), "yyyy-MM-dd");
+      const key = `${record.user_id}_${dateKey}`;
+      
+      if (!groupedData.has(key)) {
+        groupedData.set(key, {});
+      }
+      
+      const group = groupedData.get(key)!;
+      if (record.type === "entrada") {
+        group.entrada = record;
+      } else if (record.type === "salida") {
+        group.salida = record;
+      }
+    });
+
+    const headers = ["Nombre", "Fecha", "Hora Entrada", "Hora Salida", "Tiempo Total"];
     const csvData: string[][] = [];
 
-    records.forEach(record => {
+    groupedData.forEach(group => {
+      const entrada = group.entrada;
+      const salida = group.salida;
+      const record = entrada || salida;
+      
+      if (!record) return;
+
       csvData.push([
         record.user_name || "N/A",
-        record.user_email || "N/A",
-        record.type === "entrada" ? "Entrada" : "Salida",
         format(new Date(record.timestamp), "dd/MM/yyyy", { locale: es }),
-        format(new Date(record.timestamp), "HH:mm:ss", { locale: es }),
-        record.duration_minutes ? formatDuration(record.duration_minutes) : "N/A",
-        record.latitude && record.longitude 
-          ? `${record.latitude.toFixed(4)} ${record.longitude.toFixed(4)}` 
-          : "N/A",
+        entrada ? format(new Date(entrada.timestamp), "HH:mm:ss", { locale: es }) : "N/A",
+        salida ? format(new Date(salida.timestamp), "HH:mm:ss", { locale: es }) : "N/A",
+        salida?.duration_minutes ? formatDuration(salida.duration_minutes) : "N/A",
       ]);
     });
 
