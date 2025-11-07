@@ -194,7 +194,7 @@ export default function AttendanceRecords() {
       }
     });
 
-    const headers = ["Nombre", "Fecha", "Hora Entrada", "Hora Salida", "Tiempo Total"];
+    const headers = ["Nombre", "Fecha", "Hora Entrada", "Hora Salida", "Tiempo Total", "Ubicación Entrada", "Ubicación Salida"];
     const csvData: string[][] = [];
 
     groupedData.forEach(group => {
@@ -210,6 +210,12 @@ export default function AttendanceRecords() {
         entrada ? format(new Date(entrada.timestamp), "HH:mm:ss", { locale: es }) : "N/A",
         salida ? format(new Date(salida.timestamp), "HH:mm:ss", { locale: es }) : "N/A",
         salida?.duration_minutes ? formatDuration(salida.duration_minutes) : "N/A",
+        entrada && entrada.latitude && entrada.longitude 
+          ? `${entrada.latitude.toFixed(4)} ${entrada.longitude.toFixed(4)}` 
+          : "N/A",
+        salida && salida.latitude && salida.longitude 
+          ? `${salida.latitude.toFixed(4)} ${salida.longitude.toFixed(4)}` 
+          : "N/A",
       ]);
     });
 
