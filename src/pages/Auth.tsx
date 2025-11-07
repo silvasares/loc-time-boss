@@ -11,9 +11,8 @@ import { ClipboardCheck } from "lucide-react";
 import { z } from "zod";
 const loginSchema = z.object({
   username: z.string().min(1, "Usuario requerido"),
-  password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres"),
+  password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres")
 });
-
 const signupSchema = z.object({
   username: z.string().min(3, "El usuario debe tener al menos 3 caracteres").max(50, "El usuario no puede tener más de 50 caracteres"),
   password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres"),
@@ -31,7 +30,7 @@ export default function Auth() {
   });
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Validate based on form type
     try {
       if (isLogin) {
@@ -50,12 +49,12 @@ export default function Auth() {
       if (isLogin) {
         // Generate synthetic email from username
         const syntheticEmail = `${formData.username}@asistencia.local`;
-        
-        const { error } = await supabase.auth.signInWithPassword({
+        const {
+          error
+        } = await supabase.auth.signInWithPassword({
           email: syntheticEmail,
           password: formData.password
         });
-        
         if (error) {
           if (error.message.includes("Invalid login credentials")) {
             toast.error("Usuario o contraseña incorrectos");
@@ -64,7 +63,6 @@ export default function Auth() {
           }
           return;
         }
-        
         toast.success("¡Bienvenido!");
         navigate("/");
       } else {
@@ -72,13 +70,13 @@ export default function Auth() {
           toast.error("El nombre completo es requerido");
           return;
         }
-        
         const redirectUrl = `${window.location.origin}/`;
-        
+
         // Generate synthetic email for all users
         const syntheticEmail = `${formData.username}@asistencia.local`;
-        
-        const { error } = await supabase.auth.signUp({
+        const {
+          error
+        } = await supabase.auth.signUp({
           email: syntheticEmail,
           password: formData.password,
           options: {
@@ -90,7 +88,6 @@ export default function Auth() {
             emailRedirectTo: redirectUrl
           }
         });
-        
         if (error) {
           if (error.message.includes("User already registered")) {
             toast.error("Este usuario ya está registrado");
@@ -99,7 +96,6 @@ export default function Auth() {
           }
           return;
         }
-        
         toast.success(isFirstAdmin ? "¡Administrador creado exitosamente!" : "¡Usuario creado exitosamente!");
         navigate("/");
       }
@@ -137,17 +133,10 @@ export default function Auth() {
             
             <div className="space-y-2">
               <Label htmlFor="username">Usuario</Label>
-              <Input 
-                id="username" 
-                type="text" 
-                placeholder="usuario" 
-                value={formData.username} 
-                onChange={e => setFormData({
-                  ...formData,
-                  username: e.target.value
-                })} 
-                required 
-              />
+              <Input id="username" type="text" placeholder="usuario" value={formData.username} onChange={e => setFormData({
+              ...formData,
+              username: e.target.value
+            })} required />
             </div>
 
             <div className="space-y-2">
@@ -171,16 +160,7 @@ export default function Auth() {
           </form>
 
           <div className="mt-4 text-center text-sm">
-            <button
-              type="button"
-              onClick={() => {
-                setIsLogin(!isLogin);
-                setFormData({ username: "", password: "", fullName: "" });
-              }}
-              className="text-primary hover:underline"
-            >
-              {isLogin ? "¿No tienes cuenta? Regístrate" : "¿Ya tienes cuenta? Inicia sesión"}
-            </button>
+            
           </div>
         </CardContent>
       </Card>
