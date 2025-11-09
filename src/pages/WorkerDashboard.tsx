@@ -48,16 +48,23 @@ export default function WorkerDashboard() {
         return;
       }
 
+      const timeout = setTimeout(() => {
+        reject(new Error("Tiempo de espera agotado para obtener la ubicación"));
+      }, 10000);
+
       navigator.geolocation.getCurrentPosition(
         (position) => {
+          clearTimeout(timeout);
           resolve({
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
           });
         },
         (error) => {
+          clearTimeout(timeout);
           reject(new Error("No se pudo obtener la ubicación. Por favor, permite el acceso a tu ubicación."));
-        }
+        },
+        { timeout: 10000, enableHighAccuracy: false }
       );
     });
   };
@@ -65,6 +72,8 @@ export default function WorkerDashboard() {
   const handleEntry = async () => {
     if (!user) return;
     setLoading(true);
+    setHasActiveEntry(true);
+    toast.loading("Registrando entrada...", { id: "entry-toast" });
 
     try {
       const location = await getGeolocation();
@@ -78,11 +87,11 @@ export default function WorkerDashboard() {
 
       if (error) throw error;
 
-      toast.success("✅ Entrada registrada exitosamente");
-      setHasActiveEntry(true);
+      toast.success("✅ Entrada registrada exitosamente", { id: "entry-toast" });
     } catch (error: any) {
       console.error("Error registering entry:", error);
-      toast.error(error.message || "Error al registrar entrada");
+      setHasActiveEntry(false);
+      toast.error(error.message || "Error al registrar entrada", { id: "entry-toast" });
     } finally {
       setLoading(false);
     }
@@ -91,24 +100,27 @@ export default function WorkerDashboard() {
   const handleExit = async () => {
     if (!user) return;
     setLoading(true);
+    setHasActiveEntry(false);
+    toast.loading("Registrando salida...", { id: "exit-toast" });
 
     try {
-      const location = await getGeolocation();
+      const [location, activeEntryResult] = await Promise.all([
+        getGeolocation(),
+        supabase
+          .from("attendance_records")
+          .select("id")
+          .eq("user_id", user.id)
+          .eq("type", "entrada")
+          .is("duration_minutes", null)
+          .order("timestamp", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      ]);
 
-      // Get the active entry
-      const { data: activeEntry, error: fetchError } = await supabase
-        .from("attendance_records")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("type", "entrada")
-        .is("duration_minutes", null)
-        .order("timestamp", { ascending: false })
-        .limit(1)
-        .single();
-
+      const { data: activeEntry, error: fetchError } = activeEntryResult;
       if (fetchError) throw fetchError;
+      if (!activeEntry) throw new Error("No se encontró una entrada activa");
 
-      // Insert exit record
       const { error: insertError } = await supabase.from("attendance_records").insert({
         user_id: user.id,
         type: "salida",
@@ -119,11 +131,11 @@ export default function WorkerDashboard() {
 
       if (insertError) throw insertError;
 
-      toast.success("✅ Salida registrada exitosamente");
-      setHasActiveEntry(false);
+      toast.success("✅ Salida registrada exitosamente", { id: "exit-toast" });
     } catch (error: any) {
       console.error("Error registering exit:", error);
-      toast.error(error.message || "Error al registrar salida");
+      setHasActiveEntry(true);
+      toast.error(error.message || "Error al registrar salida", { id: "exit-toast" });
     } finally {
       setLoading(false);
     }
