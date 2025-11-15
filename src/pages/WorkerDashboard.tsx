@@ -41,32 +41,46 @@ export default function WorkerDashboard() {
     }
   };
 
-  const getGeolocation = (): Promise<{ latitude: number; longitude: number }> => {
-    return new Promise((resolve, reject) => {
-      if (!navigator.geolocation) {
-        reject(new Error("La geolocalización no está soportada por tu navegador"));
-        return;
+  const getPosition = (options: PositionOptions) =>
+    new Promise<GeolocationPosition>((resolve, reject) =>
+      navigator.geolocation.getCurrentPosition(resolve, reject, options)
+    );
+
+  const getGeolocation = async (): Promise<{ latitude: number; longitude: number }> => {
+    if (!navigator.geolocation) {
+      throw new Error("La geolocalización no está soportada por tu navegador");
+    }
+
+    // 1) Intento rápido con ubicación en caché (hasta 5 min) y baja precisión
+    try {
+      const pos = await getPosition({ enableHighAccuracy: false, timeout: 4000, maximumAge: 300000 });
+      return { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+    } catch {}
+
+    // 2) Intento de alta precisión con mayor tiempo de espera (nuevo fix para móviles)
+    try {
+      const pos = await getPosition({ enableHighAccuracy: true, timeout: 12000, maximumAge: 0 });
+      return { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+    } catch (err: any) {
+      // Mensajes más claros según permisos/estado
+      try {
+        if ("permissions" in navigator && (navigator as any).permissions?.query) {
+          const status = await (navigator as any).permissions.query({ name: "geolocation" as PermissionName });
+          if (status.state === "denied") {
+            throw new Error("Permiso de ubicación denegado. Activa los permisos de ubicación en Ajustes del navegador/sistema y vuelve a intentar.");
+          }
+        }
+      } catch {}
+
+      const code = (err && err.code) || 0; // 1: PERMISSION_DENIED, 2: POSITION_UNAVAILABLE, 3: TIMEOUT
+      if (code === 1) {
+        throw new Error("Permiso de ubicación denegado. Activa los permisos y vuelve a intentar.");
       }
-
-      const timeout = setTimeout(() => {
-        reject(new Error("Tiempo de espera agotado para obtener la ubicación"));
-      }, 10000);
-
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          clearTimeout(timeout);
-          resolve({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-          });
-        },
-        (error) => {
-          clearTimeout(timeout);
-          reject(new Error("No se pudo obtener la ubicación. Por favor, permite el acceso a tu ubicación."));
-        },
-        { timeout: 10000, enableHighAccuracy: false }
-      );
-    });
+      if (code === 3) {
+        throw new Error("Tiempo de espera agotado para obtener la ubicación. Asegúrate de tener GPS/Internet activados y prueba de nuevo.");
+      }
+      throw new Error("No se pudo obtener la ubicación. Activa GPS/Internet, muévete a un lugar abierto y vuelve a intentar.");
+    }
   };
 
   const handleEntry = async () => {
