@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { LogIn, LogOut, MapPin, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { InstallPrompt } from "@/components/InstallPrompt";
 
 export default function WorkerDashboard() {
   const { user } = useAuth();
@@ -195,6 +196,7 @@ export default function WorkerDashboard() {
           </Button>
         </CardContent>
       </Card>
+      <InstallPrompt />
     </div>
   );
 }
